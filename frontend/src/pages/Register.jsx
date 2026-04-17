@@ -118,6 +118,17 @@ export default function Register() {
                 className="w-full px-5 py-3.5 rounded-[18px] bg-transparent border border-[#2a2a2e] text-white focus:outline-none focus:border-[#b18fff] transition-colors placeholder-gray-600 text-[15px]"
               />
             </div>
+
+            <div>
+              <select
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+                className="w-full px-5 py-3.5 rounded-[18px] bg-[#1a1a1f] border border-[#2a2a2e] text-white focus:outline-none focus:border-[#b18fff] transition-colors text-[15px]"
+              >
+                <option value="supporter">Supporter</option>
+                <option value="creator">Creator</option>
+              </select>
+            </div>
             
             <div className="pt-2">
               <button 

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { ethers } from 'ethers';
+import { toast } from 'react-toastify';
 import { CONFIG } from '../config';
 
 const Web3Context = createContext(null);
@@ -8,42 +9,79 @@ export const Web3Provider = ({ children }) => {
   const [account, setAccount] = useState(null);
   const [contract, setContract] = useState(null);
   const [provider, setProvider] = useState(null);
+  const [isConnecting, setIsConnecting] = useState(false);
 
   const connectWallet = async () => {
-    if (window.ethereum) {
+    if (isConnecting) {
+      toast.warning('Connection already in progress. Please wait...');
+      return;
+    }
+
+    try {
+      setIsConnecting(true);
+
+      // Clear previous state first
+      setAccount(null);
+      setContract(null);
+      setProvider(null);
+
+      if (!window.ethereum) {
+        toast.error('MetaMask not detected. Please install it!');
+        return;
+      }
+
+      // REVOKE PREVIOUS PERMISSIONS FIRST - forces fresh MetaMask popup
       try {
-        const _provider = new ethers.BrowserProvider(window.ethereum);
-        setProvider(_provider);
+        await window.ethereum.request({
+          method: 'wallet_revokePermissions',
+          params: [{ eth_accounts: {} }]
+        });
+      } catch (revokeError) {
+        // Ignore if revoke not supported or fails - continue anyway
+        console.log('wallet_revokePermissions not supported or failed:', revokeError.message);
+      }
 
-        // Request account access if needed
-        await window.ethereum.request({ method: 'eth_requestAccounts' });
+      const _provider = new ethers.BrowserProvider(window.ethereum);
+      setProvider(_provider);
 
-        const _signer = await _provider.getSigner();
-        const address = await _signer.getAddress();
-        setAccount(address);
+      // Request account access - should show popup now
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      
+      if (!accounts || accounts.length === 0) {
+        toast.error('No accounts found. Please check MetaMask.');
+        return;
+      }
 
-        // Intialize contract
+      const _signer = await _provider.getSigner();
+      const address = await _signer.getAddress();
+      setAccount(address);
+      toast.success(`Wallet connected: ${address.substring(0, 6)}...${address.substring(address.length - 4)}`);
+
+      // Initialize contract
+      if (CONFIG.CONTRACT_ADDRESS && CONFIG.CONTRACT_ADDRESS !== '0x...') {
         const _contract = new ethers.Contract(CONFIG.CONTRACT_ADDRESS, CONFIG.ABI, _signer);
         setContract(_contract);
-      } catch (error) {
-        console.error("Wallet connection failed", error);
+      } else {
+        toast.error('Contract address not configured!');
       }
-    } else {
-      console.log('Non-Ethereum browser detected. You should consider trying MetaMask!');
+    } catch (error) {
+      console.error("Wallet connection failed", error);
+      toast.error(`Error: ${error.message}`);
+    } finally {
+      setIsConnecting(false);
     }
   };
 
   useEffect(() => {
     if (window.ethereum) {
       window.ethereum.on('accountsChanged', (accounts) => {
-        if (accounts.length > 0) {
-          setAccount(accounts[0]);
-          connectWallet();
-        } else {
-          setAccount(null);
-          setContract(null);
-        }
+        // Account changed - clear everything to force fresh connection
+        setAccount(null);
+        setContract(null);
+        setProvider(null);
+        toast.info('Wallet account changed. Please reconnect.');
       });
+      
       window.ethereum.on('chainChanged', () => {
         window.location.reload();
       });
